@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
+	 viewBox="0 0 128 156" style="enable-background:new 0 0 128 156;" xml:space="preserve">
+<style type="text/css">
+	.st0{stroke:#FFFFFF;stroke-miterlimit:10;}
+	.st1{fill:#FFFFFF;stroke:#000000;stroke-miterlimit:10;}
+	.st2{fill:#FFFFFF;}
+	.st3{font-family:'MyriadPro-Regular';}
+	.st4{font-size:21px;}
+	.st5{fill:none;stroke:#FFFFFF;stroke-width:2;stroke-miterlimit:10;}
+	.st6{fill:#FFFFFF;stroke:#FFFFFF;stroke-width:2;stroke-miterlimit:10;}
+</style>
+<path class="st0" d="M117.98,156H10.02C4.49,156,0,151.51,0,145.98V10.02C0,4.49,4.49,0,10.02,0h107.96C123.51,0,128,4.49,128,10.02
+	v135.96C128,151.51,123.51,156,117.98,156z"/>
+<path class="st1" d="M122.83,12.14"/>
+<text transform="matrix(1 0 0 1 28.3634 84.1636)" class="st2 st3 st4">WPRESS</text>
+<line class="st5" x1="16.88" y1="19.95" x2="48.1" y2="19.95"/>
+<line class="st6" x1="16.88" y1="43" x2="64" y2="43"/>
+<line class="st5" x1="74.78" y1="43" x2="106.01" y2="43"/>
+<line class="st6" x1="16.55" y1="101.48" x2="43.4" y2="101.48"/>
+<line class="st6" x1="50.89" y1="101.48" x2="105.68" y2="101.48"/>
+<line class="st5" x1="16.88" y1="124.63" x2="32.49" y2="124.63"/>
+<line class="st5" x1="43.5" y1="124.63" x2="74.73" y2="124.63"/>
+<line class="st5" x1="86.87" y1="124.63" x2="105.68" y2="124.63"/>
+</svg>
