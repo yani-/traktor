@@ -1,3 +1,4 @@
+import path from 'path'
 import React from 'react'
 import cn from 'classnames'
 
@@ -10,16 +11,59 @@ const MTIME_END_BYTE = 281
 const PREFIX_START_OFFSET= 281
 const PREFIX_LENGTH = 4096
 
+class Tree {
+  constructor(name) {
+    this.root = new Node(name, true)
+    this.root.parent = null
+    this.root.tree = this
+  }
+}
+
+class Node {
+  constructor(name, expanded) {
+    this.name     = name
+    this.children = []
+    this.files    = []
+    this.expanded = !!expanded
+  }
+
+  addChild(child) {
+    child.parent = this
+    this.children.push(child)
+    return child
+  }
+
+  findNode(name) {
+    if (this.name === name) {
+      return this
+    } else {
+      return this.children.find(child => {
+        return child.findNode(name)
+      })
+    }
+  }
+
+  getRootNode() {
+    if (this.parent === null)
+      return this
+
+    return this.parent.getRootNode()
+  }
+}
 
 export default class HomePage extends React.Component {
     constructor(props) {
         super(props)
         this.state = {
-            isDraggedOver: false,
-            isDropped: false,
-            file: null,
-            originalFile: null,
+            tree          : new Tree('/'),
+            isDraggedOver : false,
+            isDropped     : false,
+            isListing     : false,
+            file          : null,
+            originalFile  : null,
+            errorMessage  : '',
         }
+
     }
 
     onDragEnter(event) {
@@ -36,11 +80,33 @@ export default class HomePage extends React.Component {
         this.setState({isDraggedOver: false})
     }
 
+    onFileSelected(event) {
+        event.preventDefault()
+        const file = event.target.files.item(0)
+        this.processFile(file)
+    }
+
     onDrop(event) {
         event.preventDefault()
         const file = event.dataTransfer.files.item(0)
+        this.processFile(file)
+    }
+
+    processFile(file) {
+        if (path.extname(file.name) !== '.wpress') {
+            return this.setState({
+                tree          : new Tree('/'),
+                isDraggedOver : false,
+                isDropped     : false,
+                isListing     : false,
+                file          : null,
+                originalFile  : null,
+                errorMessage  : 'Only .wpress files are allowed',
+            })
+        }
 
         this.setState({
+          errorMessage: null,
           isDraggedOver: false,
           isDropped: true,
           file: file,
@@ -52,20 +118,32 @@ export default class HomePage extends React.Component {
 
     readFile(file) {
         this.setState({file: file})
+
         if (file.size === 4377) {
-            console.log('read')
+            this.setState({isListing: true})
             return
         }
-        let self = this
         let reader = new FileReader();
-        reader.addEventListener("loadend", function() {
-            let name = self.getName(reader.result)
-            let size = parseInt(self.getSize(reader.result), 10)
-            let mtime = self.getMTime(reader.result)
-            let prefix = self.getPrefix(reader.result)
-//            addFile(new Block(name, size, mtime, prefix, self.byteNumber + 4377))
-            self.byteNumber += 4377 + size
-            self.readFile(file.slice(4377 + size, file.size))
+        reader.addEventListener("loadend", () => {
+            let node = this.state.tree.root
+            let name = this.getName(reader.result)
+            let size = parseInt(this.getSize(reader.result), 10)
+            let mtime = this.getMTime(reader.result)
+            let prefix = this.getPrefix(reader.result)
+            prefix = prefix === '.' ? '' : prefix
+
+            if (prefix.length > 0) {
+                let parent = ''
+                prefix.split('/').map((path, depth) => {
+                    parent += '/' + path
+                    let foundNode = node.findNode(parent)
+                    node = !!foundNode ? foundNode : node.addChild(new Node(parent))
+                })
+            }
+            node.files.push(name)
+            this.setState({tree: this.state.tree})
+            this.byteNumber += 4377 + size
+            this.readFile(file.slice(4377 + size, file.size))
         });
         reader.readAsArrayBuffer(file.slice(0, 4377))
     }
@@ -107,7 +185,74 @@ export default class HomePage extends React.Component {
         return decoder.decode(dataView)
     }
 
+    onNodeClick(node, event) {
+        event.preventDefault()
+        event.stopPropagation()
+        node.expanded = !node.expanded
+        this.setState({tree: node.getRootNode().tree})
+    }
+
+    onFileClick(event) {
+        event.preventDefault()
+        event.stopPropagation()
+    }
+
+    traverse(node) {
+        if (node.expanded === false) {
+            return null
+        }
+
+        return (
+            <ul className={node.name === '/' ? '' : 'ml-4'}>
+                <li onClick={node.name === '/' ? '' : this.onNodeClick.bind(this, node)} className="cursor-pointer" key={node.name}>
+                    <img className="inline mr-2 h-4" src={node.expanded ? '/folder-open.svg' : '/folder.svg'} />
+                    {path.basename(node.name) || this.state.originalFile.name}
+
+                    {node.children.map(child => {
+                        if (child.expanded) {
+                            return this.traverse(child)
+                        } else {
+                            return (
+                                <ul className="ml-4">
+                                    <li key={node.name} onClick={this.onNodeClick.bind(this, child)}>
+                                        <img className="inline mr-2 h-4" src="/folder.svg"/>{path.basename(child.name)}
+                                    </li>
+                                </ul>
+                            )
+                        }
+                    })}
+                    {node.files.map(file => {
+                        return (
+                            <ul className="ml-4">
+                                <li onClick={this.onFileClick.bind(this)} key={node.name + '/' + file}>
+                                    <img className="inline mr-2 h-4" src="/file.svg"/>{file}
+                                </li>
+                            </ul>
+                        )
+                    })}
+                </li>
+            </ul>
+        )
+    }
+
     render () {
+        if (this.state.isListing) {
+            return (
+              <div className="bg-gray-400 max-h-screen">
+                  <div className="container mx-auto h-screen flex justify-center items-center">
+                      <div className="p-6 pr-64 flex justify-center items-center rounded bg-white shadow-xl overflow-y-auto max-h-full box-border">
+                          <div className="flex rounded border-gray-500 max-h-full">
+                              <div className="my-3 mx-5 box-border">
+                                {this.traverse(this.state.tree.root)}
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+
+            )
+        }
+
         if (this.state.isDropped) {
             const percentProcessed = 100 - (this.state.file.size / this.state.originalFile.size) * 100
             const style = {
@@ -129,6 +274,15 @@ export default class HomePage extends React.Component {
               </div>
             )
         }
+
+        let errorMessage = null
+
+        if (this.state.errorMessage) {
+            errorMessage = (
+                <div className="bg-red-400 rounded p-4 fixed bottom-0 right-0 mb-6 mr-6">{this.state.errorMessage}</div>
+            )
+        }
+
         return (
             <div className="bg-gray-400">
                 <div className="container mx-auto h-screen flex justify-center items-center">
@@ -142,15 +296,16 @@ export default class HomePage extends React.Component {
                              onDragLeave={this.onDragLeave.bind(this)}
                              onDrop={this.onDrop.bind(this)}>
                             <div className="mx-10 box-content flex-shrink-0 flex items-center justify-center pointer-events-none">
-                                <img src={this.state.isDraggedOver ? '/decompress.svg' : '/archive.svg'} width="100" />
+                                <img src={this.state.isDraggedOver ? '/file-upload.svg' : '/file-word.svg'} width="100" />
                             </div>
                             <div className="mt-3 mx-10 flex flex-col justify-center items-center pointer-events-none">
-                                <h3 className="text-md leading-6 font-medium text-gray-900">Drop your file here, or <a className="pointer-events-auto cursor-pointer text-blue-500">browse</a></h3>
+                                <h3 className="text-md leading-6 font-medium text-gray-900">Drop your file here, or <label className="pointer-events-auto cursor-pointer text-blue-500">browse <input type="file" className="hidden" onChange={this.onFileSelected.bind(this)} /></label></h3>
                                 <p className="text-sm leading-5 text-gray-500">Supports: wpress</p>
                             </div>
                         </div>
                     </div>
                 </div>
+                {errorMessage}
             </div>
         )
     }
