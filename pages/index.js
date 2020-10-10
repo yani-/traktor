@@ -1,6 +1,7 @@
 import path from 'path'
 import React from 'react'
 import cn from 'classnames'
+import { saveAs } from 'file-saver'
 
 const NAME_START_OFFSET= 0
 const NAME_LENGTH = 255
@@ -10,6 +11,18 @@ const MTIME_START_BYTE = 269
 const MTIME_END_BYTE = 281
 const PREFIX_START_OFFSET= 281
 const PREFIX_LENGTH = 4096
+
+function formatBytes(bytes, decimals = 2) {
+    if (bytes === 0) return '0 Bytes';
+
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
 
 class Tree {
   constructor(name) {
@@ -140,7 +153,7 @@ export default class HomePage extends React.Component {
                     node = !!foundNode ? foundNode : node.addChild(new Node(parent))
                 })
             }
-            node.files.push(name)
+            node.files.push({name, size, content: file.slice(4377, 4377 + size)})
             this.setState({tree: this.state.tree})
             this.byteNumber += 4377 + size
             this.readFile(file.slice(4377 + size, file.size))
@@ -192,9 +205,10 @@ export default class HomePage extends React.Component {
         this.setState({tree: node.getRootNode().tree})
     }
 
-    onFileClick(event) {
+    onFileClick(file, event) {
         event.preventDefault()
         event.stopPropagation()
+        saveAs(file.content, file.name)
     }
 
     traverse(node) {
@@ -203,8 +217,8 @@ export default class HomePage extends React.Component {
         }
 
         return (
-            <ul className={node.name === '/' ? '' : 'ml-4'}>
-                <li onClick={node.name === '/' ? '' : this.onNodeClick.bind(this, node)} className="cursor-pointer" key={node.name}>
+            <ul className={node.name === '/' ? 'mb-6' : 'ml-4'}>
+                <li onClick={node.name === '/' ? null : this.onNodeClick.bind(this, node)} className="cursor-pointer" key={node.name}>
                     <img className="inline mr-2 h-4" src={node.expanded ? '/folder-open.svg' : '/folder.svg'} />
                     {path.basename(node.name) || this.state.originalFile.name}
 
@@ -224,8 +238,8 @@ export default class HomePage extends React.Component {
                     {node.files.map(file => {
                         return (
                             <ul className="ml-4">
-                                <li onClick={this.onFileClick.bind(this)} key={node.name + '/' + file}>
-                                    <img className="inline mr-2 h-4" src="/file.svg"/>{file}
+                                <li onClick={this.onFileClick.bind(this, file)} key={node.name + '/' + file.name}>
+                                    <img className="inline mr-2 h-4" src="/file.svg"/><span className="mr-2">{file.name}</span><span className="text-xs text-gray-600">{formatBytes(file.size)}</span>
                                 </li>
                             </ul>
                         )
@@ -240,11 +254,9 @@ export default class HomePage extends React.Component {
             return (
               <div className="bg-gray-400 max-h-screen">
                   <div className="container mx-auto h-screen flex justify-center items-center">
-                      <div className="p-6 pr-64 flex justify-center items-center rounded bg-white shadow-xl overflow-y-auto max-h-full box-border">
-                          <div className="flex rounded border-gray-500 max-h-full">
-                              <div className="my-3 mx-5 box-border">
-                                {this.traverse(this.state.tree.root)}
-                              </div>
+                      <div className="p-6 pr-64 pb-0 flex justify-center items-center rounded bg-white shadow-xl overflow-y-auto max-h-full box-border">
+                          <div className="max-h-85">
+                            {this.traverse(this.state.tree.root)}
                           </div>
                       </div>
                   </div>
