@@ -4,3 +4,6 @@
 .max-h-85 {
   max-height: 85vh;
 }
+.file:hover > .hidden {
+  display: inline !important;
+}

@@ -238,8 +238,11 @@ export default class HomePage extends React.Component {
                     {node.files.map(file => {
                         return (
                             <ul className="ml-4">
-                                <li onClick={this.onFileClick.bind(this, file)} key={node.name + '/' + file.name}>
-                                    <img className="inline mr-2 h-4" src="/file.svg"/><span className="mr-2">{file.name}</span><span className="text-xs text-gray-600">{formatBytes(file.size)}</span>
+                                <li className="file" onClick={this.onFileClick.bind(this, file)} key={node.name + '/' + file.name}>
+                                    <img className="inline mr-2 h-4" src="/file.svg"/>
+                                    <span className="mr-2">{file.name}</span>
+                                    <span className="text-xs text-gray-600 mr-2">{formatBytes(file.size)}</span>
+                                    <img className="mr-2 h-4 hidden" src="/download.svg"/>
                                 </li>
                             </ul>
                         )
