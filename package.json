@@ -6,6 +6,7 @@
     },
     "dependencies": {
         "classnames": "^2.2.6",
+        "crypto": "^1.0.1",
         "file-saver": "^2.0.2",
         "next": "^9.5.3",
         "react": "^16.13.1",

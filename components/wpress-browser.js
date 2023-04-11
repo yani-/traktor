@@ -2,7 +2,10 @@ import path from 'path'
 import React from 'react'
 import cn from 'classnames'
 import { saveAs } from 'file-saver'
+import {Modal} from "./Modal";
+import Crypto from "./crypto";
 
+const crypto = new Crypto();
 const NAME_START_OFFSET= 0
 const NAME_LENGTH = 255
 const SIZE_START_BYTE = 255
@@ -68,13 +71,19 @@ export default class WPressBrowser extends React.Component {
     constructor(props) {
         super(props)
         this.state = {
-            tree          : new Tree('/'),
-            isDraggedOver : false,
-            isDropped     : false,
-            isListing     : false,
-            file          : null,
-            originalFile  : null,
-            errorMessage  : '',
+            tree                : new Tree('/'),
+            isDraggedOver       : false,
+            isDropped           : false,
+            isListing           : false,
+            isPasswordRequested : false,
+            file                : null,
+            originalFile        : null,
+            errorMessage        : '',
+            encryptedSignature  : '',
+            decryptionKey       : '',
+            password            : '',
+            passwordError       : '',
+            loading             : false,
         }
 
     }
@@ -129,6 +138,23 @@ export default class WPressBrowser extends React.Component {
         this.readFile(file)
     }
 
+    readPackageJson(file, size) {
+        let reader = new FileReader();
+        const self = this;
+        reader.addEventListener("loadend", () => {
+            const content = (new TextDecoder('utf-8')).decode(new DataView(reader.result));
+            const config = JSON.parse(content);
+            if(config.Encrypted) {
+                self.setState({
+                    isPasswordRequested: true,
+                    encryptedSignature: config.EncryptedSignature
+                });
+            }
+        });
+
+        reader.readAsArrayBuffer(file.slice(4377, 4377 + size))
+    }
+
     readFile(file) {
         this.setState({file: file})
 
@@ -152,6 +178,9 @@ export default class WPressBrowser extends React.Component {
                     let foundNode = node.findNode(parent)
                     node = !!foundNode ? foundNode : node.addChild(new Node(parent))
                 })
+            }
+            if(name == 'package.json') {
+                this.readPackageJson(file, size);
             }
             node.files.push({name, size, content: file.slice(4377, 4377 + size)})
             this.setState({tree: this.state.tree})
@@ -208,13 +237,34 @@ export default class WPressBrowser extends React.Component {
     onFileClick(file, event) {
         event.preventDefault()
         event.stopPropagation()
-        saveAs(file.content, file.name)
+
+        if(this.state.loading) {
+            return false;
+        }
+
+        this.setState({loading: file.name});
+        const self = this;
+
+        if(this.state.decryptionKey) {
+            crypto.decryptFile(this.state.decryptionKey, file.content)
+                .then(fileContent => {
+                    const blob = new Blob([fileContent]);
+
+                    saveAs(blob, file.name);
+
+                    self.setState({loading: false});
+                });
+        } else {
+            saveAs('file.content', file.name)
+        }
     }
 
     traverse(node) {
         if (node.expanded === false) {
             return null
         }
+
+        const { state: { loading } } = this;
 
         return (
             <ul className={node.name === '/' ? 'mb-6' : 'ml-4'}>
@@ -238,11 +288,12 @@ export default class WPressBrowser extends React.Component {
                     {node.files.map(file => {
                         return (
                             <ul className="ml-4">
-                                <li className="file" onClick={this.onFileClick.bind(this, file)} key={node.name + '/' + file.name}>
+                                <li className={loading ? 'loading file' : 'file'} onClick={this.onFileClick.bind(this, file)} key={node.name + '/' + file.name}>
                                     <img className="inline mr-2 h-4" src="/file.svg"/>
                                     <span className="mr-2">{file.name}</span>
                                     <span className="text-xs text-gray-600 mr-2">{formatBytes(file.size)}</span>
-                                    <img className="mr-2 h-4 hidden" src="/download.svg"/>
+                                    { !loading ? <img className="mr-2 h-4 hidden" src="/download.svg"/> : '' }
+                                    { loading === file.name ? <img className="mr-2 h-4 loader" src="/loader.gif"/> : '' }
                                 </li>
                             </ul>
                         )
@@ -252,14 +303,82 @@ export default class WPressBrowser extends React.Component {
         )
     }
 
+    cancelPassword() {
+        this.setState({
+            tree                 : new Tree('/'),
+            isDraggedOver        : false,
+            isDropped            : false,
+            isListing            : false,
+            file                 : null,
+            originalFile         : null,
+            errorMessage         : '',
+            isPasswordRequested  : false,
+            passwordError        : '',
+        });
+    }
+
+    validatePassword() {
+        const password = this.state.password;
+        try {
+            const decryptionKey = crypto.makeKeyFromPassword(password);
+
+            crypto.decrypt(
+                crypto.extractEncryptedText(this.state.encryptedSignature),
+                decryptionKey,
+                crypto.extractIv(this.state.encryptedSignature)
+            );
+
+            this.setState({
+                decryptionKey,
+                isPasswordRequested: false
+            });
+        } catch (e) {
+            console.error(e);
+
+            this.setState({
+                passwordError : 'Invalid password',
+            })
+        }
+    }
+
     render () {
+        if(this.state.isPasswordRequested) {
+            let errorMessage = null
+
+            if (this.state.passwordError) {
+                errorMessage = (
+                    <div className="bg-red-400 rounded p-4 fixed bottom-0 right-0 mb-12 mr-6">{this.state.passwordError}</div>
+                )
+            }
+
+            return (
+                <div className="bg-gray-400 max-h-screen">
+                    <Modal>
+                        <div className="flex flex-col gap-2 bg-white px-4 pb-4 rounded-lg">
+                            <h1 className="text-xl text-black mt-2 pr-48">Backup is encrypted</h1>
+                            <div className="flex flex-col gap-2 my-4">
+                                <label htmlFor="email">Please enter password</label>
+                                <input id="text" type="password" className="py-2 px-4 border border-gray-200 rounded-lg" placeholder="******"
+                                       onChange={({target}) => this.setState({password: target.value})}/>
+                            </div>
+                            <div className="flex flex-row gap-2">
+                                <a href="#" onClick={() => this.cancelPassword()} className="flex-1 py-2 px-4 bg-gray-500 hover:bg-gray-600 text-white font-bold text-lg rounded-full text-center">Cancel</a>
+                                <button onClick={() => this.validatePassword()} className="flex-1 py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white font-bold text-lg rounded-full">Decrypt</button>
+                            </div>
+                        </div>
+                    </Modal>
+                    {errorMessage}
+                </div>
+            );
+        }
+
         if (this.state.isListing) {
             return (
               <div className="bg-gray-400 max-h-screen">
                   <div className="container mx-auto h-screen flex justify-center items-center">
                       <div className="p-6 pr-64 pb-0 flex justify-center items-center rounded bg-white shadow-xl overflow-y-auto max-h-full box-border">
                           <div className="max-h-85">
-                            {this.traverse(this.state.tree.root)}
+                              {this.traverse(this.state.tree.root)}
                           </div>
                       </div>
                   </div>

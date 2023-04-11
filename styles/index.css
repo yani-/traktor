@@ -7,3 +7,11 @@
 .file:hover > .hidden {
   display: inline !important;
 }
+
+.loader {
+  display: none;
+}
+
+.file.loading .loader {
+  display: inline;
+}
