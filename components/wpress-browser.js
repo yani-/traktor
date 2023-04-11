@@ -255,7 +255,7 @@ export default class WPressBrowser extends React.Component {
                     self.setState({loading: false});
                 });
         } else {
-            saveAs('file.content', file.name)
+            saveAs(file.content, file.name)
         }
     }
 
