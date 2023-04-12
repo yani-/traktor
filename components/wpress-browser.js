@@ -3,9 +3,17 @@ import React from 'react'
 import cn from 'classnames'
 import { saveAs } from 'file-saver'
 import {Modal} from "./Modal";
-import Crypto from "./crypto";
+import {DownloadIcon} from "./icons/DownloadIcon";
+import {LoadingIcon} from "./icons/LoadingIcon";
 
-const crypto = new Crypto();
+import {
+    makeKeyFromPassword,
+    extractIv,
+    extractEncryptedText,
+    decrypt,
+    decryptFile,
+} from "../helpers/cryptoHelpers";
+
 const NAME_START_OFFSET= 0
 const NAME_LENGTH = 255
 const SIZE_START_BYTE = 255
@@ -246,13 +254,18 @@ export default class WPressBrowser extends React.Component {
         const self = this;
 
         if(this.state.decryptionKey) {
-            crypto.decryptFile(this.state.decryptionKey, file.content)
+            decryptFile(this.state.decryptionKey, file.content)
                 .then(fileContent => {
                     const blob = new Blob([fileContent]);
 
                     saveAs(blob, file.name);
 
                     self.setState({loading: false});
+                })
+                .catch((error) => {
+                    console.error(error);
+
+                    this.setState({ error })
                 });
         } else {
             saveAs(file.content, file.name)
@@ -292,8 +305,8 @@ export default class WPressBrowser extends React.Component {
                                     <img className="inline mr-2 h-4" src="/file.svg"/>
                                     <span className="mr-2">{file.name}</span>
                                     <span className="text-xs text-gray-600 mr-2">{formatBytes(file.size)}</span>
-                                    { !loading ? <img className="mr-2 h-4 hidden" src="/download.svg"/> : '' }
-                                    { loading === file.name ? <img className="mr-2 h-4 loader" src="/loader.gif"/> : '' }
+                                    <DownloadIcon hidden={loading} />
+                                    <LoadingIcon hidden={loading !== file.name} />
                                 </li>
                             </ul>
                         )
@@ -320,12 +333,12 @@ export default class WPressBrowser extends React.Component {
     validatePassword() {
         const password = this.state.password;
         try {
-            const decryptionKey = crypto.makeKeyFromPassword(password);
+            const decryptionKey = makeKeyFromPassword(password);
 
-            crypto.decrypt(
-                crypto.extractEncryptedText(this.state.encryptedSignature),
+            decrypt(
+                extractEncryptedText(this.state.encryptedSignature),
                 decryptionKey,
-                crypto.extractIv(this.state.encryptedSignature)
+                extractIv(this.state.encryptedSignature)
             );
 
             this.setState({
