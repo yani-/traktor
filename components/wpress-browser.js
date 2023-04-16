@@ -264,11 +264,13 @@ export default class WPressBrowser extends React.Component {
                 })
                 .catch((error) => {
                     console.error(error);
+                    self.setState({loading: false});
 
                     this.setState({ error })
                 });
         } else {
             saveAs(file.content, file.name)
+            self.setState({loading: false});
         }
     }
 
