@@ -2,9 +2,9 @@ import path from 'path'
 import React from 'react'
 import cn from 'classnames'
 import { saveAs } from 'file-saver'
-import {Modal} from "./Modal";
-import {DownloadIcon} from "./icons/DownloadIcon";
-import {LoadingIcon} from "./icons/LoadingIcon";
+import { Modal } from "./Modal";
+import { DownloadIcon } from "./icons/DownloadIcon";
+import { LoadingIcon } from "./icons/LoadingIcon";
 
 import {
     makeKeyFromPassword,
@@ -152,7 +152,7 @@ export default class WPressBrowser extends React.Component {
         reader.addEventListener("loadend", () => {
             const content = (new TextDecoder('utf-8')).decode(new DataView(reader.result));
             const config = JSON.parse(content);
-            if(config.Encrypted) {
+            if (config.Encrypted) {
                 self.setState({
                     isPasswordRequested: true,
                     encryptedSignature: config.EncryptedSignature
@@ -187,7 +187,7 @@ export default class WPressBrowser extends React.Component {
                     node = !!foundNode ? foundNode : node.addChild(new Node(parent))
                 })
             }
-            if(name == 'package.json') {
+            if (name === 'package.json') {
                 this.readPackageJson(file, size);
             }
             node.files.push({name, size, content: file.slice(4377, 4377 + size)})
@@ -246,14 +246,14 @@ export default class WPressBrowser extends React.Component {
         event.preventDefault()
         event.stopPropagation()
 
-        if(this.state.loading) {
+        if (this.state.loading) {
             return false;
         }
 
         this.setState({loading: file.name});
         const self = this;
 
-        if(this.state.decryptionKey) {
+        if (this.state.decryptionKey) {
             decryptFile(this.state.decryptionKey, file.content)
                 .then(fileContent => {
                     const blob = new Blob([fileContent]);
@@ -357,7 +357,7 @@ export default class WPressBrowser extends React.Component {
     }
 
     render () {
-        if(this.state.isPasswordRequested) {
+        if (this.state.isPasswordRequested) {
             let errorMessage = null
 
             if (this.state.passwordError) {
