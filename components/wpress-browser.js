@@ -253,7 +253,7 @@ export default class WPressBrowser extends React.Component {
         this.setState({loading: file.name});
         const self = this;
 
-        if (this.state.decryptionKey) {
+        if (file.name !== 'package.json' && this.state.decryptionKey) {
             decryptFile(this.state.decryptionKey, file.content)
                 .then(fileContent => {
                     const blob = new Blob([fileContent]);
