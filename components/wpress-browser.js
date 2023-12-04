@@ -84,6 +84,7 @@ export default class WPressBrowser extends React.Component {
             isDropped           : false,
             isListing           : false,
             isPasswordRequested : false,
+            isCorruptedFile     : false,
             file                : null,
             originalFile        : null,
             errorMessage        : '',
