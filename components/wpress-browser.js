@@ -125,22 +125,24 @@ export default class WPressBrowser extends React.Component {
     processFile(file) {
         if (path.extname(file.name) !== '.wpress') {
             return this.setState({
-                tree          : new Tree('/'),
-                isDraggedOver : false,
-                isDropped     : false,
-                isListing     : false,
-                file          : null,
-                originalFile  : null,
-                errorMessage  : 'Only .wpress files are allowed',
+                tree            : new Tree('/'),
+                isDraggedOver   : false,
+                isDropped       : false,
+                isListing       : false,
+                isCorruptedFile : false,
+                file            : null,
+                originalFile    : null,
+                errorMessage    : 'Only .wpress files are allowed',
             })
         }
 
         this.setState({
-          errorMessage: null,
-          isDraggedOver: false,
-          isDropped: true,
-          file: file,
-          originalFile: file,
+          errorMessage    : null,
+          isDraggedOver   : false,
+          isDropped       : true,
+          isCorruptedFile : false,
+          file            : file,
+          originalFile    : file,
         })
 
         this.readFile(file)
@@ -173,11 +175,19 @@ export default class WPressBrowser extends React.Component {
         let reader = new FileReader();
         reader.addEventListener("loadend", () => {
             let node = this.state.tree.root
-            let name = this.getName(reader.result)
-            let size = parseInt(this.getSize(reader.result), 10)
-            let mtime = this.getMTime(reader.result)
-            let prefix = this.getPrefix(reader.result)
-            prefix = prefix === '.' ? '' : prefix
+            let name, size, mtime, prefix
+            try {
+                name = this.getName(reader.result)
+                size = parseInt(this.getSize(reader.result), 10)
+                mtime = this.getMTime(reader.result)
+                prefix = this.getPrefix(reader.result)
+                prefix = prefix === '.' ? '' : prefix
+            } catch (e) {
+                return this.setState({
+                    isListing: true,
+                    isCorruptedFile: true,
+                })
+            }
 
             if (prefix.length > 0) {
                 let parent = ''
@@ -187,9 +197,11 @@ export default class WPressBrowser extends React.Component {
                     node = !!foundNode ? foundNode : node.addChild(new Node(parent))
                 })
             }
+
             if (name === 'package.json') {
                 this.readPackageJson(file, size);
             }
+
             node.files.push({name, size, content: file.slice(4377, 4377 + size)})
             this.setState({tree: this.state.tree})
             this.byteNumber += 4377 + size
@@ -388,17 +400,32 @@ export default class WPressBrowser extends React.Component {
         }
 
         if (this.state.isListing) {
-            return (
-              <div className="bg-gray-400 max-h-screen">
-                  <div className="container mx-auto h-screen flex justify-center items-center">
-                      <div className="p-6 pr-64 pb-0 flex justify-center items-center rounded bg-white shadow-xl overflow-y-auto max-h-full box-border">
-                          <div className="max-h-85">
-                              {this.traverse(this.state.tree.root)}
-                          </div>
-                      </div>
-                  </div>
-              </div>
+            let errorMessage = null
 
+            if (this.state.isCorruptedFile) {
+                errorMessage = (
+                    <div className="bg-red-400 text-white text-center w-full rounded p-4 fixed top-0 left-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="mr-1 w-6 h-6 inline-block">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                        </svg>
+                        This backup is corrupted!
+                    </div>
+                )
+            }
+
+            return (
+              <>
+                <div>{errorMessage}</div>
+                <div className="bg-gray-400 max-h-screen">
+                    <div className="container mx-auto h-screen flex justify-center items-center">
+                        <div className="p-6 pr-64 pb-0 flex justify-center items-center rounded bg-white shadow-xl overflow-y-auto max-h-full box-border">
+                            <div className="max-h-85">
+                                {this.traverse(this.state.tree.root)}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+              </>
             )
         }
 
