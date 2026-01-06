@@ -93,6 +93,9 @@ export default class WPressBrowser extends React.Component {
             password            : '',
             passwordError       : '',
             loading             : false,
+            isCompressed        : false,
+            compressionType     : null,
+            compressionError    : '',
         }
 
     }
@@ -155,12 +158,25 @@ export default class WPressBrowser extends React.Component {
         reader.addEventListener("loadend", () => {
             const content = (new TextDecoder('utf-8')).decode(new DataView(reader.result));
             const config = JSON.parse(content);
-            if (config.Encrypted) {
-                self.setState({
-                    isPasswordRequested: true,
-                    encryptedSignature: config.EncryptedSignature
-                });
+
+            const isEncrypted = config.Encrypted === true;
+            const isCompressed = config.Compression && config.Compression.Enabled === true;
+            const compressionType = isCompressed ? (config.Compression.Type || 'zlib') : null;
+
+            let compressionError = null;
+
+            const stateUpdate = {
+                isCompressed,
+                compressionType,
+                compressionError
+            };
+
+            if (isEncrypted) {
+                stateUpdate.isPasswordRequested = true;
+                stateUpdate.encryptedSignature = config.EncryptedSignature;
             }
+
+            self.setState(stateUpdate);
         });
 
         reader.readAsArrayBuffer(file.slice(4377, 4377 + size))
@@ -266,8 +282,22 @@ export default class WPressBrowser extends React.Component {
         this.setState({loading: file.name});
         const self = this;
 
-        if (file.name !== 'package.json' && this.state.decryptionKey) {
-            decryptFile(this.state.decryptionKey, file.content)
+        const needsProcessing = (
+            (file.name !== 'package.json' && file.name !== 'multisite.json' && this.state.decryptionKey) ||
+            (this.state.isCompressed && file.name !== 'package.json' && file.name !== 'multisite.json')
+        );
+
+        if (needsProcessing) {
+            decryptFile(
+                this.state.decryptionKey || null,
+                file.content,
+                {
+                    isEncrypted: this.state.decryptionKey,
+                    isCompressed: this.state.isCompressed,
+                    compressionType: this.state.compressionType,
+                    fileName: file.name
+                }
+            )
                 .then(fileContent => {
                     const blob = new Blob([fileContent]);
 
@@ -410,6 +440,24 @@ export default class WPressBrowser extends React.Component {
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                         </svg>
                         This backup is corrupted!
+                    </div>
+                )
+            } else if (this.state.compressionError) {
+                errorMessage = (
+                    <div className="bg-red-400 text-white text-center w-full rounded p-4 fixed top-0 left-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="mr-1 w-6 h-6 inline-block">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                        </svg>
+                        Compression Error: {this.state.compressionError}
+                    </div>
+                )
+            } else if (this.state.errorMessage) {
+                errorMessage = (
+                    <div className="bg-red-400 text-white text-center w-full rounded p-4 fixed top-0 left-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="mr-1 w-6 h-6 inline-block">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                        </svg>
+                        {this.state.errorMessage}
                     </div>
                 )
             }
