@@ -107,7 +107,7 @@ function processChunk(rawChunk, options) {
  * @param {Object} options - Processing options
  * @param {boolean} options.isEncrypted - Whether file is encrypted
  * @param {boolean} options.isCompressed - Whether file is compressed
- * @param {string} options.compressionType - 'zlib' or 'bzip2' (if compressed)
+ * @param {string} options.compressionType - 'zlib' (if compressed)
  * @param {string} options.fileName - Name of the file (for config file detection)
  * @returns {Promise<Buffer>} Processed file content
  */
