@@ -286,10 +286,10 @@ export default class WPressBrowser extends React.Component {
 
         if (needsProcessing) {
             decryptFile(
-                this.state.decryptionKey || null,
+                this.state.decryptionKey,
                 file.content,
                 {
-                    isEncrypted: this.state.decryptionKey,
+                    isEncrypted: !!this.state.decryptionKey,
                     isCompressed: this.state.isCompressed,
                     compressionType: this.state.compressionType,
                     fileName: file.name
