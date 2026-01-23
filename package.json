@@ -5,6 +5,7 @@
         "start": "next start"
     },
     "dependencies": {
+        "bzip2": "^0.1.1",
         "classnames": "^2.5.1",
         "file-saver": "^2.0.5",
         "next": "^16.1.1",
