@@ -55,9 +55,7 @@ function decompressChunk(compressedChunk, compressionType) {
             return Buffer.from(decompressed);
         } catch (e) {
             const msg = e?.message || String(e);
-            throw new Error(
-                `zlib decompression failed: ${msg} (chunk size: ${compressedChunk.length} bytes)`
-            );
+            throw new Error(`zlib decompression failed: ${msg} (chunk size: ${compressedChunk.length} bytes)` );
         }
     }
 
@@ -104,9 +102,11 @@ async function processChunk(rawChunk, options) {
     if (isCompressed && compressionType) {
         try {
             if (chunk.length === 0) throw new Error('Cannot decompress empty chunk');
+
             if (compressionType === 'zlib' && chunk.length < 2) {
                 throw new Error(`Chunk too small for zlib decompression: ${chunk.length} bytes`);
             }
+
             if (compressionType === 'bzip2' && chunk.length < 10) {
                 throw new Error(`Chunk too small for bzip2 decompression: ${chunk.length} bytes`);
             }
