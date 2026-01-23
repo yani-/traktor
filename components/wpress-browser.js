@@ -161,7 +161,7 @@ export default class WPressBrowser extends React.Component {
 
             const isEncrypted = config.Encrypted === true;
             const isCompressed = config.Compression && config.Compression.Enabled === true;
-            const compressionType = isCompressed ? (config.Compression.Type || 'zlib') : null;
+            const compressionType = isCompressed ? (config.Compression.Type || 'gzip') : null;
 
             const stateUpdate = {
                 isCompressed: isCompressed,

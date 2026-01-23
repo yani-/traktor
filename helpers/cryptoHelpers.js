@@ -43,19 +43,19 @@ export function decrypt(cipherText, key, iv) {
 /**
  * Decompresses a chunk based on compression type
  * @param {Buffer} compressedChunk - Compressed chunk data
- * @param {string} compressionType - 'zlib' or 'bzip2'
+ * @param {string} compressionType - 'gzip' or 'bzip2'
  * @returns {Buffer} Decompressed chunk data
  */
 function decompressChunk(compressedChunk, compressionType) {
     const uint8Array = compressedChunk instanceof Uint8Array ? compressedChunk : new Uint8Array(compressedChunk);
 
-    if (compressionType === 'zlib') {
+    if (compressionType === 'gzip') {
         try {
             const decompressed = pako.inflate(uint8Array);
             return Buffer.from(decompressed);
         } catch (e) {
             const msg = e?.message || String(e);
-            throw new Error(`zlib decompression failed: ${msg} (chunk size: ${compressedChunk.length} bytes)` );
+            throw new Error(`gzip decompression failed: ${msg} (chunk size: ${compressedChunk.length} bytes)` );
         }
     }
 
@@ -103,8 +103,8 @@ async function processChunk(rawChunk, options) {
         try {
             if (chunk.length === 0) throw new Error('Cannot decompress empty chunk');
 
-            if (compressionType === 'zlib' && chunk.length < 2) {
-                throw new Error(`Chunk too small for zlib decompression: ${chunk.length} bytes`);
+            if (compressionType === 'gzip' && chunk.length < 2) {
+                throw new Error(`Chunk too small for gzip decompression: ${chunk.length} bytes`);
             }
 
             if (compressionType === 'bzip2' && chunk.length < 10) {
@@ -128,7 +128,7 @@ async function processChunk(rawChunk, options) {
  * @param {Object} options - Processing options
  * @param {boolean} options.isEncrypted - Whether file is encrypted
  * @param {boolean} options.isCompressed - Whether file is compressed
- * @param {string} options.compressionType - 'zlib' or 'bzip2' (if compressed)
+ * @param {string} options.compressionType - 'gzip' or 'bzip2' (if compressed)
  * @param {string} options.fileName - Name of the file (for config file detection)
  * @returns {Promise<Buffer>} Processed file content
  */
