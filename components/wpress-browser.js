@@ -308,15 +308,9 @@ export default class WPressBrowser extends React.Component {
                 saveAs(file.content, file.name);
                 self.setState({ loading: false, errorMessage: '' })
             }
-
-            if (typeof requestAnimationFrame !== 'undefined') {
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(runDownload);
-                });
-            } else {
-                setTimeout(runDownload, 0);
-            }
         };
+
+        setTimeout(runDownload, 50);
     }
 
     traverse(node) {
