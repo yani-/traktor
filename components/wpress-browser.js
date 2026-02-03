@@ -302,7 +302,7 @@ export default class WPressBrowser extends React.Component {
                     })
                     .catch((error) => {
                         console.error(error);
-                        self.setState({ loading: false, error });
+                        self.setState({ loading: false, errorMessage: error.message || 'Download failed' });
                     });
             } else {
                 saveAs(file.content, file.name);
