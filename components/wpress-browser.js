@@ -276,41 +276,46 @@ export default class WPressBrowser extends React.Component {
             return false;
         }
 
-        this.setState({loading: file.name});
         const self = this;
-
         const needsProcessing = (
             (file.name !== 'package.json' && file.name !== 'multisite.json' && this.state.decryptionKey) ||
             (this.state.isCompressed && file.name !== 'package.json' && file.name !== 'multisite.json')
         );
 
-        if (needsProcessing) {
-            decryptFile(
-                this.state.decryptionKey,
-                file.content,
-                {
-                    isEncrypted: !!this.state.decryptionKey,
-                    isCompressed: this.state.isCompressed,
-                    compressionType: this.state.compressionType,
-                    fileName: file.name
-                }
-            )
-                .then(fileContent => {
-                    const blob = new Blob([fileContent]);
+        this.setState({ loading: file.name });
+        const runDownload = () => {
+            if (needsProcessing) {
+                decryptFile(
+                    self.state.decryptionKey,
+                    file.content,
+                    {
+                        isEncrypted: !!self.state.decryptionKey,
+                        isCompressed: self.state.isCompressed,
+                        compressionType: self.state.compressionType,
+                        fileName: file.name
+                    }
+                )
+                    .then(fileContent => {
+                        const blob = new Blob([fileContent]);
+                        saveAs(blob, file.name);
+                        self.setState({ loading: false });
+                    })
+                    .catch((error) => {
+                        console.error(error);
+                        self.setState({ loading: false, error });
+                    });
+            } else {
+                saveAs(file.content, file.name);
+                self.setState({ loading: false });
+            }
+        };
 
-                    saveAs(blob, file.name);
-
-                    self.setState({loading: false});
-                })
-                .catch((error) => {
-                    console.error(error);
-                    self.setState({loading: false});
-
-                    this.setState({ error })
-                });
+        if (typeof requestAnimationFrame !== 'undefined') {
+            requestAnimationFrame(() => {
+                requestAnimationFrame(runDownload);
+            });
         } else {
-            saveAs(file.content, file.name)
-            self.setState({loading: false});
+            setTimeout(runDownload, 0);
         }
     }
 
@@ -349,6 +354,9 @@ export default class WPressBrowser extends React.Component {
                                     <span className="text-xs text-gray-600 mr-2">{formatBytes(file.size)}</span>
                                     <DownloadIcon hidden={loading} />
                                     <LoadingIcon hidden={loading !== file.name} />
+                                    {loading === file.name && (
+                                        <span className="ml-1 text-sm text-gray-500">Preparing download…</span>
+                                    )}
                                 </li>
                             </ul>
                         )

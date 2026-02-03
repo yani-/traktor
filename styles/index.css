@@ -8,9 +8,14 @@
 }
 
 .loader {
-  display: none;
+  display: none !important;
 }
 
 .file.loading .loader {
-  display: inline;
+  display: inline !important;
+}
+
+.file.loading {
+  cursor: wait;
+  opacity: 0.9;
 }
