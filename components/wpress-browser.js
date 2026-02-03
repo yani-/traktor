@@ -308,15 +308,15 @@ export default class WPressBrowser extends React.Component {
                 saveAs(file.content, file.name);
                 self.setState({ loading: false });
             }
-        };
 
-        if (typeof requestAnimationFrame !== 'undefined') {
-            requestAnimationFrame(() => {
-                requestAnimationFrame(runDownload);
-            });
-        } else {
-            setTimeout(runDownload, 0);
-        }
+            if (typeof requestAnimationFrame !== 'undefined') {
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(runDownload);
+                });
+            } else {
+                setTimeout(runDownload, 0);
+            }
+        };
     }
 
     traverse(node) {
