@@ -298,7 +298,7 @@ export default class WPressBrowser extends React.Component {
                     .then(fileContent => {
                         const blob = new Blob([fileContent]);
                         saveAs(blob, file.name);
-                        self.setState({ loading: false });
+                        self.setState({ loading: false, errorMessage: '' })
                     })
                     .catch((error) => {
                         console.error(error);
@@ -306,7 +306,7 @@ export default class WPressBrowser extends React.Component {
                     });
             } else {
                 saveAs(file.content, file.name);
-                self.setState({ loading: false });
+                self.setState({ loading: false, errorMessage: '' })
             }
 
             if (typeof requestAnimationFrame !== 'undefined') {
