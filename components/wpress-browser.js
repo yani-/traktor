@@ -213,7 +213,7 @@ export default class WPressBrowser extends React.Component {
             }
 
             if (name === 'package.json' || name === 'multisite.json') {
-                if(prefix.length === 0) {
+                if (prefix.length === 0) {
                     this.readPackageJson(file, size);
                 }
             }
