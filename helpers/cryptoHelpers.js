@@ -122,6 +122,16 @@ async function processChunk(rawChunk, options) {
 }
 
 /**
+ * Yields to the main thread to allow browser repaints
+ * @returns {Promise<void>}
+ */
+function yieldToMain() {
+    return new Promise(resolve => {
+        setTimeout(resolve, 0);
+    });
+}
+
+/**
  * Decrypts and/or decompresses file content
  * @param {Buffer} decryptionKey - Decryption key (if encrypted)
  * @param {Blob|ArrayBuffer} fileContent - File content from archive
@@ -142,16 +152,17 @@ export async function decryptFile(decryptionKey, fileContent, options = {}) {
 
     const arrayBuffer = await fileContent.arrayBuffer();
     let buffer = Buffer.from(arrayBuffer);
-    
-    let processedParts = Buffer.from([]);
+
+    let processedParts = [];
     let bufferLength = buffer.length;
     let position = 0;
+    let chunkCount = 0;
 
     while (position < bufferLength) {
         let rawChunk = null;
         const chunkStartPosition = position;
         let chunkSize = 0;
-        
+
         if (isCompressed) {
             if (position + CHUNK_SIZE_PREFIX_LENGTH > bufferLength) {
                 if (position < bufferLength) {
@@ -166,7 +177,7 @@ export async function decryptFile(decryptionKey, fileContent, options = {}) {
             if (chunkSize === 0) {
                 throw new Error(`Invalid compressed chunk size: 0 at position ${position - CHUNK_SIZE_PREFIX_LENGTH}`);
             }
-            
+
             const remainingBytes = bufferLength - position;
             if (chunkSize > remainingBytes) {
                 throw new Error(`Compressed chunk size (${chunkSize}) exceeds remaining buffer (${remainingBytes}) at position ${position}`);
@@ -188,12 +199,16 @@ export async function decryptFile(decryptionKey, fileContent, options = {}) {
                 decryptionKey,
                 fileName
             });
-            processedParts = Buffer.concat([processedParts, processed]);
+            processedParts.push(processed);
         } catch (error) {
             const errorMessage = error?.message || error?.toString() || String(error) || 'Unknown error';
             throw new Error(`Error processing chunk at offset ${chunkStartPosition}: ${errorMessage}`);
         }
+
+        chunkCount++;
+        if (chunkCount % 5 === 0) {
+            await yieldToMain();
+        }
     }
-    
-    return processedParts;
+    return Buffer.concat(processedParts);
 }

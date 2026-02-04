@@ -212,8 +212,10 @@ export default class WPressBrowser extends React.Component {
                 })
             }
 
-            if (name === 'package.json') {
-                this.readPackageJson(file, size);
+            if (name === 'package.json' || name === 'multisite.json') {
+                if (prefix.length === 0) {
+                    this.readPackageJson(file, size);
+                }
             }
 
             node.files.push({name, size, content: file.slice(4377, 4377 + size)})
@@ -276,42 +278,42 @@ export default class WPressBrowser extends React.Component {
             return false;
         }
 
-        this.setState({loading: file.name});
         const self = this;
-
         const needsProcessing = (
             (file.name !== 'package.json' && file.name !== 'multisite.json' && this.state.decryptionKey) ||
             (this.state.isCompressed && file.name !== 'package.json' && file.name !== 'multisite.json')
         );
 
-        if (needsProcessing) {
-            decryptFile(
-                this.state.decryptionKey,
-                file.content,
-                {
-                    isEncrypted: !!this.state.decryptionKey,
-                    isCompressed: this.state.isCompressed,
-                    compressionType: this.state.compressionType,
-                    fileName: file.name
-                }
-            )
-                .then(fileContent => {
-                    const blob = new Blob([fileContent]);
-
-                    saveAs(blob, file.name);
-
-                    self.setState({loading: false});
-                })
-                .catch((error) => {
-                    console.error(error);
-                    self.setState({loading: false});
-
-                    this.setState({ error })
+        this.setState({ loading: file.name }, () => {
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    if (needsProcessing) {
+                        decryptFile(
+                            self.state.decryptionKey,
+                            file.content,
+                            {
+                                isEncrypted: !!self.state.decryptionKey,
+                                isCompressed: self.state.isCompressed,
+                                compressionType: self.state.compressionType,
+                                fileName: file.name
+                            }
+                        )
+                            .then(fileContent => {
+                                const blob = new Blob([fileContent]);
+                                saveAs(blob, file.name);
+                                self.setState({ loading: false, errorMessage: '' })
+                            })
+                            .catch((error) => {
+                                console.error(error);
+                                self.setState({ loading: false, errorMessage: error.message || 'Download failed' });
+                            });
+                    } else {
+                        saveAs(file.content, file.name);
+                        self.setState({ loading: false, errorMessage: '' })
+                    }
                 });
-        } else {
-            saveAs(file.content, file.name)
-            self.setState({loading: false});
-        }
+            });
+        });
     }
 
     traverse(node) {
@@ -322,9 +324,9 @@ export default class WPressBrowser extends React.Component {
         const { state: { loading } } = this;
 
         return (
-            <ul className={node.name === '/' ? 'mb-6' : 'ml-4'}>
+            <ul className={node.name === '/' ? 'mb-6' : 'ml-4'} key={ node.name }>
                 <li onClick={node.name === '/' ? null : this.onNodeClick.bind(this, node)} className="cursor-pointer" key={node.name}>
-                    <img className="inline mr-2 h-4" src={node.expanded ? '/folder-open.svg' : '/folder.svg'} />
+                    <img className="inline mr-2 h-4" src={node.expanded ? '/folder-open.svg' : '/folder.svg'}  alt=""/>
                     {path.basename(node.name) || this.state.originalFile.name}
 
                     {node.children.map(child => {
@@ -332,9 +334,9 @@ export default class WPressBrowser extends React.Component {
                             return this.traverse(child)
                         } else {
                             return (
-                                <ul className="ml-4">
+                                <ul className="ml-4" key={ child.name }>
                                     <li key={node.name} onClick={this.onNodeClick.bind(this, child)}>
-                                        <img className="inline mr-2 h-4" src="/folder.svg"/>{path.basename(child.name)}
+                                        <img className="inline mr-2 h-4" src="/folder.svg" alt=""/>{path.basename(child.name)}
                                     </li>
                                 </ul>
                             )
@@ -342,13 +344,16 @@ export default class WPressBrowser extends React.Component {
                     })}
                     {node.files.map(file => {
                         return (
-                            <ul className="ml-4">
+                            <ul className="ml-4" key={ node.name + '/' + file.name }>
                                 <li className={loading ? 'loading file' : 'file'} onClick={this.onFileClick.bind(this, file)} key={node.name + '/' + file.name}>
                                     <img className="inline mr-2 h-4" src="/file.svg"/>
                                     <span className="mr-2">{file.name}</span>
                                     <span className="text-xs text-gray-600 mr-2">{formatBytes(file.size)}</span>
                                     <DownloadIcon hidden={loading} />
                                     <LoadingIcon hidden={loading !== file.name} />
+                                    {loading === file.name && (
+                                        <span className="ml-1 text-sm text-gray-500">Preparing download…</span>
+                                    )}
                                 </li>
                             </ul>
                         )
