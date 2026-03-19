@@ -28,7 +28,9 @@ const PREFIX_LENGTH_V2 = 4088
 const CRC_START_OFFSET = 4369
 const CRC_LENGTH = 8
 const HEADER_SIZE = 4377
-const V2_EOF_PREFIX = '--AI1WM.'
+const EOF_SIZE_START = 255
+const EOF_SIZE_LENGTH = 14
+const V2_CRC_REGEX = /^[0-9a-f]{8}$/i
 
 function formatBytes(bytes, decimals = 2) {
     if (bytes === 0) return '0 Bytes';
@@ -174,14 +176,23 @@ export default class WPressBrowser extends React.Component {
         const eofBuffer = await eofBlob.arrayBuffer()
         const eofBytes = new Uint8Array(eofBuffer)
         const decoder = new TextDecoder('ascii')
-        const eofStart = decoder.decode(eofBytes.slice(0, 8))
-        const isV2 = eofStart === V2_EOF_PREFIX
+
+        // v2 EOF: a255(null) + a14(size) + a4100(null) + a8(crc)
+        const crcField = decoder.decode(eofBytes.slice(CRC_START_OFFSET, CRC_START_OFFSET + CRC_LENGTH))
+        const sizeField = decoder.decode(eofBytes.slice(EOF_SIZE_START, EOF_SIZE_START + EOF_SIZE_LENGTH)).replace(/\0/g, '')
+        const isV1 = eofBytes.every(b => b === 0)
+        const isV2 = V2_CRC_REGEX.test(crcField) && sizeField.length > 0
+
+        // EOF block is not empty but not a valid v2 format — corrupted file
+        if (!isV1 && !isV2) {
+            this.setState({ archiveCrcWarning: true, isListing: true })
+            return
+        }
 
         const stateUpdate = { isV2 }
 
         if (isV2) {
-            // Extract expected CRC from EOF block: "--AI1WM.xxxxxxxx.EOF--"
-            const expectedCrc = decoder.decode(eofBytes.slice(8, 16))
+            const expectedCrc = crcField
             const dataSize = file.size - HEADER_SIZE
 
             if (dataSize > 0) {
@@ -190,7 +201,9 @@ export default class WPressBrowser extends React.Component {
                 const actualCrc = computeCrc32(new Uint8Array(dataBuffer))
 
                 if (actualCrc !== expectedCrc) {
-                    stateUpdate.archiveCrcWarning = `Archive CRC mismatch: expected ${expectedCrc}, got ${actualCrc}. Archive may be corrupted.`
+                    stateUpdate.archiveCrcWarning = true
+                    this.setState(stateUpdate)
+                    return
                 }
             }
         }
@@ -509,10 +522,10 @@ export default class WPressBrowser extends React.Component {
             } else if (this.state.archiveCrcWarning) {
                 errorMessage = (
                     <div className="bg-yellow-400 text-black text-center w-full rounded p-4 fixed top-0 left-0">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="mr-1 w-6 h-6 inline-block">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="mr-1 w-6 h-6 inline-block">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                         </svg>
-                        {this.state.archiveCrcWarning}
+                        This backup file is damaged and can't be opened.<br />Try downloading or transferring the file again.<br /><br /><strong>Reason:</strong> File integrity check failed (CRC mismatch). <a href="https://help.servmask.com/knowledgebase/import-failed-crc-mismatch/" target="_blank" rel="noopener noreferrer" className="underline">Technical details</a>
                     </div>
                 )
             } else if (this.state.compressionError) {
