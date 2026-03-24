@@ -181,7 +181,19 @@ export default class WPressBrowser extends React.Component {
         const crcField = decoder.decode(eofBytes.slice(CRC_START_OFFSET, CRC_START_OFFSET + CRC_LENGTH))
         const sizeField = decoder.decode(eofBytes.slice(EOF_SIZE_START, EOF_SIZE_START + EOF_SIZE_LENGTH)).replace(/\0/g, '')
         const isV1 = eofBytes.every(b => b === 0)
-        const isV2 = V2_CRC_REGEX.test(crcField) && sizeField.length > 0
+
+        // Strict v2 check: reconstruct expected EOF block and compare byte-for-byte
+        let isV2 = false
+        if (V2_CRC_REGEX.test(crcField) && sizeField.length > 0) {
+            const expected = new Uint8Array(HEADER_SIZE)
+            // Write size field (null-padded to 14 bytes) at offset 255
+            const sizeBytes = new TextEncoder().encode(sizeField)
+            expected.set(sizeBytes, EOF_SIZE_START)
+            // Write CRC field (8 bytes) at offset 4369
+            const crcBytes = new TextEncoder().encode(crcField)
+            expected.set(crcBytes, CRC_START_OFFSET)
+            isV2 = eofBytes.every((b, i) => b === expected[i])
+        }
 
         // EOF block is not empty but not a valid v2 format — corrupted file
         if (!isV1 && !isV2) {
