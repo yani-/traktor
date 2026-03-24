@@ -9,6 +9,32 @@ const CHUNK_SIZE_PREFIX_LENGTH = 4; // 4 bytes for compressed chunk size
 
 const CONFIG_FILES = ['package.json', 'multisite.json'];
 
+// CRC32b lookup table (polynomial 0xEDB88320)
+const CRC32_TABLE = (() => {
+    const table = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+        let crc = i;
+        for (let j = 0; j < 8; j++) {
+            crc = (crc & 1) ? (0xEDB88320 ^ (crc >>> 1)) : (crc >>> 1);
+        }
+        table[i] = crc;
+    }
+    return table;
+})();
+
+/**
+ * Computes CRC32b checksum of a Uint8Array
+ * @param {Uint8Array} uint8Array - Data to checksum
+ * @returns {string} 8-char lowercase hex CRC32
+ */
+export function computeCrc32(uint8Array) {
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < uint8Array.length; i++) {
+        crc = CRC32_TABLE[(crc ^ uint8Array[i]) & 0xFF] ^ (crc >>> 8);
+    }
+    return ((crc ^ 0xFFFFFFFF) >>> 0).toString(16).padStart(8, '0');
+}
+
 export function isConfigFile(fileName) {
     return CONFIG_FILES.includes(fileName);
 }

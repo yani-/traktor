@@ -5,6 +5,7 @@ import { saveAs } from 'file-saver'
 import { Modal } from "./Modal";
 import { DownloadIcon } from "./icons/DownloadIcon";
 import { LoadingIcon } from "./icons/LoadingIcon";
+import { CopyIcon } from "./icons/CopyIcon";
 
 import {
     makeKeyFromPassword,
@@ -12,6 +13,7 @@ import {
     extractEncryptedText,
     decrypt,
     decryptFile,
+    computeCrc32,
 } from "../helpers/cryptoHelpers";
 
 const NAME_START_OFFSET= 0
@@ -21,7 +23,14 @@ const SIZE_END_BYTE = 269
 const MTIME_START_BYTE = 269
 const MTIME_END_BYTE = 281
 const PREFIX_START_OFFSET= 281
-const PREFIX_LENGTH = 4096
+const PREFIX_LENGTH_V1 = 4096
+const PREFIX_LENGTH_V2 = 4088
+const CRC_START_OFFSET = 4369
+const CRC_LENGTH = 8
+const HEADER_SIZE = 4377
+const EOF_SIZE_START = 255
+const EOF_SIZE_LENGTH = 14
+const V2_CRC_REGEX = /^[0-9a-f]{8}$/i
 
 function formatBytes(bytes, decimals = 2) {
     if (bytes === 0) return '0 Bytes';
@@ -96,6 +105,8 @@ export default class WPressBrowser extends React.Component {
             isCompressed        : false,
             compressionType     : null,
             compressionError    : null,
+            isV2                : false,
+            archiveCrcWarning   : null,
         }
 
     }
@@ -141,15 +152,75 @@ export default class WPressBrowser extends React.Component {
         }
 
         this.setState({
-          errorMessage    : null,
-          isDraggedOver   : false,
-          isDropped       : true,
-          isCorruptedFile : false,
-          file            : file,
-          originalFile    : file,
+          errorMessage      : null,
+          isDraggedOver     : false,
+          isDropped         : true,
+          isCorruptedFile   : false,
+          isV2              : false,
+          archiveCrcWarning : null,
+          file              : file,
+          originalFile      : file,
         })
 
-        this.readFile(file)
+        this.detectVersionAndReadFile(file)
+    }
+
+    async detectVersionAndReadFile(file) {
+        if (file.size < HEADER_SIZE) {
+            this.readFile(file)
+            return
+        }
+
+        // Read the last HEADER_SIZE bytes to check for v2 EOF block
+        const eofBlob = file.slice(file.size - HEADER_SIZE, file.size)
+        const eofBuffer = await eofBlob.arrayBuffer()
+        const eofBytes = new Uint8Array(eofBuffer)
+        const decoder = new TextDecoder('ascii')
+
+        // v2 EOF: a255(null) + a14(size) + a4100(null) + a8(crc)
+        const crcField = decoder.decode(eofBytes.slice(CRC_START_OFFSET, CRC_START_OFFSET + CRC_LENGTH))
+        const sizeField = decoder.decode(eofBytes.slice(EOF_SIZE_START, EOF_SIZE_START + EOF_SIZE_LENGTH)).replace(/\0/g, '')
+        const isV1 = eofBytes.every(b => b === 0)
+
+        // Strict v2 check: reconstruct expected EOF block and compare byte-for-byte
+        let isV2 = false
+        if (V2_CRC_REGEX.test(crcField) && sizeField.length > 0) {
+            const expected = new Uint8Array(HEADER_SIZE)
+            // Write size field (null-padded to 14 bytes) at offset 255
+            const sizeBytes = new TextEncoder().encode(sizeField)
+            expected.set(sizeBytes, EOF_SIZE_START)
+            // Write CRC field (8 bytes) at offset 4369
+            const crcBytes = new TextEncoder().encode(crcField)
+            expected.set(crcBytes, CRC_START_OFFSET)
+            isV2 = eofBytes.every((b, i) => b === expected[i])
+        }
+
+        // EOF block is not empty but not a valid v2 format — corrupted file
+        if (!isV1 && !isV2) {
+            this.setState({ archiveCrcWarning: true, isListing: true })
+            return
+        }
+
+        const stateUpdate = { isV2 }
+
+        if (isV2) {
+            const expectedCrc = crcField
+            const dataSize = file.size - HEADER_SIZE
+
+            if (dataSize > 0) {
+                const dataBlob = file.slice(0, dataSize)
+                const dataBuffer = await dataBlob.arrayBuffer()
+                const actualCrc = computeCrc32(new Uint8Array(dataBuffer))
+
+                if (actualCrc !== expectedCrc) {
+                    stateUpdate.archiveCrcWarning = true
+                    this.setState(stateUpdate)
+                    return
+                }
+            }
+        }
+
+        this.setState(stateUpdate, () => this.readFile(file))
     }
 
     readPackageJson(file, size) {
@@ -176,26 +247,29 @@ export default class WPressBrowser extends React.Component {
             self.setState(stateUpdate);
         });
 
-        reader.readAsArrayBuffer(file.slice(4377, 4377 + size))
+        reader.readAsArrayBuffer(file.slice(HEADER_SIZE, HEADER_SIZE + size))
     }
 
     readFile(file) {
         this.setState({file: file})
 
-        if (file.size === 4377) {
+        if (file.size === HEADER_SIZE) {
             this.setState({isListing: true})
             return
         }
         let reader = new FileReader();
         reader.addEventListener("loadend", () => {
             let node = this.state.tree.root
-            let name, size, mtime, prefix
+            let name, size, mtime, prefix, crc
             try {
                 name = this.getName(reader.result)
                 size = parseInt(this.getSize(reader.result), 10)
                 mtime = this.getMTime(reader.result)
                 prefix = this.getPrefix(reader.result)
                 prefix = prefix === '.' ? '' : prefix
+                if (this.state.isV2) {
+                    crc = this.getCrc(reader.result)
+                }
             } catch (e) {
                 return this.setState({
                     isListing: true,
@@ -218,12 +292,16 @@ export default class WPressBrowser extends React.Component {
                 }
             }
 
-            node.files.push({name, size, content: file.slice(4377, 4377 + size)})
+            const fileEntry = {name, size, content: file.slice(HEADER_SIZE, HEADER_SIZE + size)}
+            if (crc) {
+                fileEntry.crc = crc
+            }
+            node.files.push(fileEntry)
             this.setState({tree: this.state.tree})
-            this.byteNumber += 4377 + size
-            this.readFile(file.slice(4377 + size, file.size))
+            this.byteNumber += HEADER_SIZE + size
+            this.readFile(file.slice(HEADER_SIZE + size, file.size))
         });
-        reader.readAsArrayBuffer(file.slice(0, 4377))
+        reader.readAsArrayBuffer(file.slice(0, HEADER_SIZE))
     }
 
     getName(blob) {
@@ -249,12 +327,18 @@ export default class WPressBrowser extends React.Component {
     }
 
     getPrefix(blob) {
-        let length = new Int8Array(blob, PREFIX_START_OFFSET, PREFIX_LENGTH).reduceRight((previous, current, index) => {
+        const prefixLength = this.state.isV2 ? PREFIX_LENGTH_V2 : PREFIX_LENGTH_V1
+        let length = new Int8Array(blob, PREFIX_START_OFFSET, prefixLength).reduceRight((previous, current, index) => {
             return previous ? previous : ((current === 0) ? false : index+1)
         }, false)
 
         let decoder = new TextDecoder('utf-8')
         return decoder.decode(new DataView(blob, PREFIX_START_OFFSET, length))
+    }
+
+    getCrc(blob) {
+        let decoder = new TextDecoder('utf-8')
+        return decoder.decode(new DataView(blob, CRC_START_OFFSET, CRC_LENGTH)).replace(/\0/g, '')
     }
 
     getContent(blob) {
@@ -354,6 +438,7 @@ export default class WPressBrowser extends React.Component {
                                     {loading === file.name && (
                                         <span className="ml-1 text-sm text-gray-500">Preparing download…</span>
                                     )}
+                                    {file.crc && <div className="ml-6 text-xs text-gray-400 font-mono cursor-pointer hover:text-gray-600 group/crc flex items-center" title="Click to copy" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(file.crc); }}>CRC: {file.crc}<span className="invisible group-hover/crc:visible"><CopyIcon /></span></div>}
                                 </li>
                             </ul>
                         )
@@ -374,6 +459,8 @@ export default class WPressBrowser extends React.Component {
             errorMessage         : '',
             isPasswordRequested  : false,
             passwordError        : '',
+            isV2                 : false,
+            archiveCrcWarning    : null,
         });
     }
 
@@ -442,6 +529,15 @@ export default class WPressBrowser extends React.Component {
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                         </svg>
                         This backup is corrupted!
+                    </div>
+                )
+            } else if (this.state.archiveCrcWarning) {
+                errorMessage = (
+                    <div className="bg-yellow-400 text-black text-center w-full rounded p-4 fixed top-0 left-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="mr-1 w-6 h-6 inline-block">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                        </svg>
+                        This backup file is damaged and can't be opened.<br />Try downloading or transferring the file again.<br /><br /><strong>Reason:</strong> File integrity check failed (CRC mismatch). <a href="https://help.servmask.com/knowledgebase/import-failed-crc-mismatch/" target="_blank" rel="noopener noreferrer" className="underline">Technical details</a>
                     </div>
                 )
             } else if (this.state.compressionError) {
